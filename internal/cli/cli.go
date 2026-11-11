@@ -36,6 +36,9 @@ type Runner struct {
 	// LogOutput 是日志的输出目标; 为 nil 时写 Stderr.
 	// 测试用它把日志收进缓冲区, 既不污染测试输出, 也能断言日志内容.
 	LogOutput io.Writer
+	// OpenURL 用系统浏览器打开地址; 为 nil 时调用系统默认浏览器.
+	// 测试用它记录被打开的地址, 避免测试真的弹出浏览器窗口.
+	OpenURL func(string) error
 	// Env 是输入源解析依赖, 留空时使用真实环境.
 	Env *source.Env
 }
@@ -253,6 +256,7 @@ func (r *Runner) runEncodeCommand(ctx context.Context, args []string) int {
 	fs.IntVarP(&opts.ModuleSize, "size", "s", 8, "PNG 每模块像素数 (1..64)")
 	fs.BoolVar(&opts.NoColor, "no-color", false, "终端输出不带颜色")
 	fs.BoolVar(&opts.ForceWeb, "web", false, "强制在浏览器中显示")
+	fs.BoolVar(&opts.NoOpen, "no-open", false, "启动网页服务后不自动打开浏览器")
 	fs.BoolVar(&opts.ForceTerminal, "terminal", false, "强制输出终端字符画, 即使标准输出不是终端")
 	fs.StringVar(&opts.Bind, "bind", "127.0.0.1:0", "网页服务监听地址")
 	port := fs.Int("port", 0, "网页服务端口, 0 表示自动分配")
@@ -454,6 +458,7 @@ func (r *Runner) printUsage() {
 	encodeFS.IntVarP(&enc.ModuleSize, "size", "s", 8, "PNG 每模块像素数")
 	encodeFS.BoolVar(&enc.NoColor, "no-color", false, "终端输出不带颜色")
 	encodeFS.BoolVar(&enc.ForceWeb, "web", false, "强制在浏览器中显示")
+	encodeFS.BoolVar(&enc.NoOpen, "no-open", false, "不自动打开浏览器")
 	encodeFS.BoolVar(&enc.ForceTerminal, "terminal", false, "强制输出终端字符画")
 	encodeFS.StringVar(&enc.Bind, "bind", "127.0.0.1:0", "监听地址")
 	encodeFS.Int("port", 0, "网页端口")

@@ -53,6 +53,7 @@ qr --version       查看版本
 | `-s, --size` | 编码 | PNG 每模块像素数, 默认 8 |
 | `--terminal` | 编码 | 标准输出不是终端时也打印字符画 |
 | `--web` | 编码 | 强制用浏览器显示 |
+| `--no-open` | 编码 | 启动网页服务后不自动打开浏览器 |
 | `--port` / `--bind` | 编码 | 网页服务的端口与监听地址 |
 | `--no-color` | 编码 | 字符画不带 ANSI 配色 |
 
@@ -63,8 +64,8 @@ qr --version       查看版本
 每次调用都会往 stderr 打一行, 说明读了什么, 按什么模式处理, 结果写到哪里:
 
 ```
-time=23:28:51 level=info msg=输入源与模式 mode=decode by=auto origin=file \
-  source=shot.png kind=图片 format=png bytes=1459 output=stdout
+time=23:28:51 level=info msg=输入源与模式 mode=encode by=auto origin=arg \
+  source=参数 kind=文本 content="https://example.com" bytes=19 output=stdout(chars)
 ```
 
 各字段含义:
@@ -76,9 +77,17 @@ time=23:28:51 level=info msg=输入源与模式 mode=decode by=auto origin=file 
 | `origin` | `arg` 参数, `file` 文件, `stdin` 管道, `clipboard` 剪贴板 |
 | `source` | 具体名称, 例如文件名或 "剪贴板图片" |
 | `kind` | `图片` 或 `文本` |
-| `format` | 图片格式, 仅图片输入时出现 |
+| `content` | 读到的东西本身: 文本输入显示文本内容, 图片输入显示格式 |
 | `bytes` | 输入字节数 |
-| `output` | 结果去向, 例如 `stdout(png)`, `stdout(chars)`, `file:x.png`, `web:127.0.0.1:8080` |
+| `output` | 结果去向, 例如 `stdout(png)`, `stdout(chars)`, `file:x.png`, `web` |
+
+`content` 让日志直接告诉你读到了什么, 而不只是一个来源名称. 文本超过 120 字符时
+截断并注明原始长度. 含空格, 等号或换行的值会加引号, 保证相邻字段仍能区分.
+
+在终端里 `content` 显示为浅灰色, 与 `mode`, `origin`, `output` 这些判断依据区分开.
+日志被重定向到文件或管道时不加颜色; 设置 `NO_COLOR` 环境变量也能关闭颜色.
+
+`output` 为 `web` 时端口由系统分配, 真实地址在服务启动后单独记一行.
 
 多文件解码时, 每个来源各记一行. 被跳过的输入会额外记一条 `warn`, 避免用户
 困惑某个输入为什么没有产生结果.
@@ -175,6 +184,11 @@ qr d multi.png --json
 ```
 
 服务只监听回环地址, 页面可以反复刷新, 按 Ctrl+C 退出. 端口可以用 `--port` 固定.
+
+二维码放不下时会用系统默认浏览器自动打开该页面. 不希望被打断时加 `--no-open`,
+程序只打印地址并继续等待. 自动打开失败 (例如没有可用的浏览器) 只会打印一条提示,
+服务照常运行.
+
 如果显式用 `--bind` 监听到非回环地址, 程序会提示二维码内容对内网可见.
 
 ## 剪贴板

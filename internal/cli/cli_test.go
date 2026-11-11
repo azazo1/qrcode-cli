@@ -3,7 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -550,4 +552,154 @@ func TestLogReportsSkippedInput(t *testing.T) {
 	if !bytes.Contains(logb.Bytes(), []byte("text.txt")) {
 		t.Fatalf("日志缺少来源名称:\n%s", logb.String())
 	}
+}
+
+// TestLogShowsInputContent 校验日志里直接显示输入内容, 而不只是来源名称.
+//
+// 只知道 "参数" 或 "剪贴板" 无法确认读到的到底是哪份数据.
+func TestLogShowsInputContent(t *testing.T) {
+	cases := []struct {
+		name        string
+		args        []string
+		env         source.Env
+		wantContent string
+	}{
+		{
+			name:        "参数文本",
+			args:        []string{"e", "hello-world"},
+			env:         fakeEnv(nil, nil, "", nil, true),
+			wantContent: "content=hello-world",
+		},
+		{
+			name:        "剪贴板图片显示格式",
+			args:        nil,
+			env:         fakeEnv(nil, qrPNG(t, "clip"), "", nil, true),
+			wantContent: "content=png",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, _, logs := runWithLog(t, c.args, c.env)
+			if !bytes.Contains([]byte(logs), []byte(c.wantContent)) {
+				t.Fatalf("日志缺少 %q:\n%s", c.wantContent, logs)
+			}
+		})
+	}
+}
+
+// TestLogEscapesNewlines 校验多行文本不会把日志撑成多行.
+func TestLogEscapesNewlines(t *testing.T) {
+	env := fakeEnv(nil, nil, "", []byte("line1\nline2"), false)
+
+	_, _, _, logs := runWithLog(t, []string{"e", "-i", "-"}, env)
+	if bytes.Contains([]byte(logs), []byte("line1\nline2")) {
+		t.Fatalf("日志里不应出现真实换行:\n%s", logs)
+	}
+	if !bytes.Contains([]byte(logs), []byte(`line1\nline2`)) {
+		t.Fatalf("换行应转义显示:\n%s", logs)
+	}
+}
+
+// TestLogTruncatesLongContent 校验超长输入被截断并说明总长度.
+func TestLogTruncatesLongContent(t *testing.T) {
+	long := strings.Repeat("a", 500)
+	env := fakeEnv(nil, nil, "", []byte(long), false)
+
+	_, _, _, logs := runWithLog(t, []string{"e", "-i", "-"}, env)
+	if !bytes.Contains([]byte(logs), []byte("共 500 字符")) {
+		t.Fatalf("日志应说明原始长度:\n%s", logs)
+	}
+	if bytes.Count([]byte(logs), []byte("a")) > 300 {
+		t.Fatalf("日志里的内容未被截断")
+	}
+}
+
+// TestWebOpensBrowser 校验网页模式会请求打开浏览器, 并记录真实地址.
+func TestWebOpensBrowser(t *testing.T) {
+	var opened []string
+	code, _, errs, logs := runWebCase(t, []string{"e", "payload", "--web"}, &opened)
+	if code != exitOK {
+		t.Fatalf("退出码 = %d (stderr: %s)", code, errs)
+	}
+	if len(opened) != 1 {
+		t.Fatalf("打开次数 = %d, want 1 (%v)", len(opened), opened)
+	}
+	if !strings.HasPrefix(opened[0], "http://127.0.0.1:") {
+		t.Fatalf("打开的地址 = %q", opened[0])
+	}
+	if !bytes.Contains([]byte(logs), []byte("已用默认浏览器打开")) {
+		t.Fatalf("日志应说明已打开浏览器:\n%s", logs)
+	}
+}
+
+// TestWebNoOpenSkipsBrowser 校验 --no-open 不打开浏览器.
+func TestWebNoOpenSkipsBrowser(t *testing.T) {
+	var opened []string
+	code, _, _, logs := runWebCase(t, []string{"e", "payload", "--web", "--no-open"}, &opened)
+	if code != exitOK {
+		t.Fatalf("退出码 = %d", code)
+	}
+	if len(opened) != 0 {
+		t.Fatalf("--no-open 时不应打开浏览器, 实际: %v", opened)
+	}
+	if !bytes.Contains([]byte(logs), []byte("已跳过自动打开浏览器")) {
+		t.Fatalf("日志应说明跳过了打开:\n%s", logs)
+	}
+}
+
+// TestWebOpenFailureKeepsServing 校验打开浏览器失败不影响服务退出码.
+func TestWebOpenFailureKeepsServing(t *testing.T) {
+	tty := true
+	var out, errb, logb bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	r := &Runner{
+		Stdout:           &out,
+		Stderr:           &errb,
+		LogOutput:        &logb,
+		StdinIsTerminal:  true,
+		StdoutIsTerminal: &tty,
+		OpenURL:          func(string) error { return errors.New("模拟失败") },
+	}
+	code := r.Run(ctx, []string{"e", "x", "--web"})
+	if code != exitOK {
+		t.Fatalf("打开失败不应改变退出码, 实际 %d (stderr: %s)", code, errb.String())
+	}
+	if !bytes.Contains(logb.Bytes(), []byte("自动打开浏览器失败")) {
+		t.Fatalf("日志应记录失败:\n%s", logb.String())
+	}
+}
+
+// runWebCase 在受控环境中跑一次会启动网页服务的命令.
+func runWebCase(t *testing.T, args []string, opened *[]string) (int, string, string, string) {
+	t.Helper()
+
+	tty := true
+	var out, errb, logb bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	r := &Runner{
+		Stdout:           &out,
+		Stderr:           &errb,
+		LogOutput:        &logb,
+		StdinIsTerminal:  true,
+		StdoutIsTerminal: &tty,
+		OpenURL: func(u string) error {
+			*opened = append(*opened, u)
+			return nil
+		},
+	}
+	code := r.Run(ctx, args)
+	return code, out.String(), errb.String(), logb.String()
 }

@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/azazo1/qrcode-cli/internal/browser"
 	"github.com/azazo1/qrcode-cli/internal/encode"
 	"github.com/azazo1/qrcode-cli/internal/source"
 	"github.com/azazo1/qrcode-cli/internal/terminal"
@@ -27,6 +28,8 @@ type encodeOptions struct {
 	NoColor bool
 	// ForceWeb 强制在浏览器里显示.
 	ForceWeb bool
+	// NoOpen 不在启动网页服务后自动打开浏览器.
+	NoOpen bool
 	// ForceTerminal 即使标准输出不是终端也输出字符画.
 	ForceTerminal bool
 	// Bind 是网页服务的监听地址.
@@ -57,7 +60,9 @@ func (t encodeTarget) describe(opts encodeOptions) string {
 	case targetTextFile:
 		return "file:" + opts.Output + "(txt)"
 	case targetWeb:
-		return "web:" + opts.Bind
+		// 这里不写监听端口: --port 0 时真实端口要等服务启动后才知道,
+		// 写死配置值会报出一个并不存在的地址. 真实地址由 serveWeb 记录.
+		return "web"
 	case targetStdoutPNG:
 		return "stdout(png)"
 	case targetStdoutChars:
@@ -195,13 +200,34 @@ func (r *Runner) serveWeb(ctx context.Context, opts encodeOptions, m *encode.Mat
 	}
 
 	fmt.Fprintf(r.Stderr, "二维码完整显示在 %s\n", url)
-	fmt.Fprintln(r.Stderr, "按 Ctrl+C 结束服务")
-	slog.Info("网页服务已启动", "url", url, "modules", m.Size())
+
+	// 打开浏览器失败不算错误: 服务已经在跑, 用户仍可以手动打开那个地址.
+	if opts.NoOpen {
+		slog.Info("已跳过自动打开浏览器", "reason", "--no-open")
+		fmt.Fprintln(r.Stderr, "按 Ctrl+C 结束服务")
+	} else if err := r.openURL(url); err != nil {
+		slog.Warn("自动打开浏览器失败, 请手动访问上面的地址", "error", err)
+		fmt.Fprintf(r.Stderr, "自动打开浏览器失败: %v\n", err)
+		fmt.Fprintln(r.Stderr, "按 Ctrl+C 结束服务")
+	} else {
+		slog.Info("已用默认浏览器打开", "url", url)
+		fmt.Fprintln(r.Stderr, "已在浏览器中打开, 按 Ctrl+C 结束服务")
+	}
 
 	if err := server.Wait(ctx); err != nil {
 		fmt.Fprintf(r.Stderr, "%v\n", err)
 	}
 	return exitOK
+}
+
+// openURL 用系统默认浏览器打开地址.
+//
+// Runner 可以注入自己的实现, 测试借此记录被打开的地址而不真的弹窗.
+func (r *Runner) openURL(url string) error {
+	if r.OpenURL != nil {
+		return r.OpenURL(url)
+	}
+	return browser.Open(url)
 }
 
 // stdoutIsTerminal 判断标准输出是否为终端.
