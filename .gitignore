@@ -1,8 +1,13 @@
 # 构建产物
 /bin/
+/dist/
 
 # 临时文件
 /.tmp/
+
+# Python 脚本的字节码缓存
+__pycache__/
+*.pyc
 
 # 编辑器与系统文件
 .DS_Store

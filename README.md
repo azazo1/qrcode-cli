@@ -8,14 +8,31 @@
 
 ## 安装
 
-需要 Go 1.27 或更高版本.
+从 [Releases](https://github.com/azazo1/qrcode-cli/releases) 下载对应平台的归档,
+解压后把 `qr` 放到 `PATH` 里即可. 产物是静态链接的单文件二进制, 不需要 Go 环境,
+也不需要 OpenCV 之类的系统库.
+
+需要自己构建时, 要求 Go 1.27 或更高版本:
 
 ```shell
 just build
 ```
 
-二进制位于 `bin/qr`, 直接拷到 `PATH` 里即可使用. 构建产物是单文件, 不依赖 OpenCV
-之类的系统库.
+这样的开发构建版本号显示 `dev-build`, 不携带 git 信息.
+
+## 版本号
+
+`--version` 显示的版本号由构建时的 git 状态决定:
+
+| 构建状态 | 显示 |
+|---|---|
+| 恰好在一个版本 tag 上 | `v0.1.0` |
+| 版本 tag 之后的提交 | `v0.1.0-a1b2c3d` |
+| 工作区有未提交改动 | `v0.1.0^a1b2c3d` |
+| 日常开发构建 | `dev-build` |
+
+发布产物由 `just dist` 生成, 归档名里的版本段不带 `v` 前缀, 例如
+`qr-0.1.0-linux-x86_64.tar.gz`.
 
 ## 选项
 
@@ -243,4 +260,5 @@ just build    # 构建到 bin/qr
 just run -h   # 直接运行
 just test     # 运行测试
 just lint     # 格式检查与 go vet
+just dist     # 生成当前平台的发布产物到 dist/
 ```

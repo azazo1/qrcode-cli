@@ -11,14 +11,12 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/azazo1/qrcode-cli/internal/buildinfo"
 	"github.com/azazo1/qrcode-cli/internal/clipboard"
 	"github.com/azazo1/qrcode-cli/internal/encode"
 	"github.com/azazo1/qrcode-cli/internal/logging"
 	"github.com/azazo1/qrcode-cli/internal/source"
 )
-
-// Version 是构建时注入的版本号.
-var Version = "dev"
 
 // Runner 是一次命令执行所需的全部外部依赖.
 //
@@ -50,7 +48,7 @@ func (r *Runner) Run(ctx context.Context, args []string) int {
 			r.printUsage()
 			return exitOK
 		case "--version", "version":
-			fmt.Fprintln(r.Stdout, Version)
+			fmt.Fprintln(r.Stdout, buildinfo.Version())
 			return exitOK
 		}
 	}
