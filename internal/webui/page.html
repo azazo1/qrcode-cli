@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二维码</title>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #ffffff;
+    color: #111111;
+  }
+  .card {
+    padding: 1rem;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    line-height: 0;
+  }
+  img {
+    display: block;
+    width: min(70vmin, 560px);
+    height: auto;
+    image-rendering: pixelated;
+  }
+  .content {
+    max-width: 70vmin;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: #f3f4f6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  .meta {
+    font-size: 0.8rem;
+    color: #6b7280;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="{{.QRDataURI}}" alt="二维码">
+  </div>
+  <div class="content">{{.Content}}</div>
+  <div class="meta">版本 {{.Version}} · 纠错等级 {{.Level}} · {{.Modules}}×{{.Modules}} 模块</div>
+</body>
+</html>
