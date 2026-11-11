@@ -35,14 +35,74 @@ type encodeOptions struct {
 	Output string
 }
 
+// encodeTarget 是编码结果的实际去向.
+//
+// 把去向先解析成值再分别处理, 是为了让日志能如实报告结果去了哪里:
+// 如果日志里另写一套判断, 就会和真正的分支逐渐偏离.
+type encodeTarget int
+
+const (
+	targetPNGFile     encodeTarget = iota // 写入 PNG 文件
+	targetTextFile                        // 写入字符画文本文件
+	targetWeb                             // 本地网页服务
+	targetStdoutPNG                       // 标准输出 PNG 二进制
+	targetStdoutChars                     // 标准输出字符画
+)
+
+// describe 返回便于阅读的去向描述, 用于日志.
+func (t encodeTarget) describe(opts encodeOptions) string {
+	switch t {
+	case targetPNGFile:
+		return "file:" + opts.Output
+	case targetTextFile:
+		return "file:" + opts.Output + "(txt)"
+	case targetWeb:
+		return "web:" + opts.Bind
+	case targetStdoutPNG:
+		return "stdout(png)"
+	case targetStdoutChars:
+		return "stdout(chars)"
+	default:
+		return "unknown"
+	}
+}
+
+// resolveTarget 决定编码结果写到哪里.
+//
+// 优先级: -o 指定的文件 > --web > 标准输出不是终端时写 PNG >
+// --terminal 强制字符画 > 终端放得下就画字符画 > 放不下改用网页.
+func (r *Runner) resolveTarget(opts encodeOptions, m *encode.Matrix) encodeTarget {
+	if opts.Output != "" {
+		if strings.ToLower(filepath.Ext(opts.Output)) == ".txt" {
+			return targetTextFile
+		}
+		return targetPNGFile
+	}
+
+	if opts.ForceWeb {
+		return targetWeb
+	}
+
+	// 标准输出不是终端且没有强制字符画时, 输出 PNG 二进制供管道或重定向使用.
+	if !r.stdoutIsTerminal() && !opts.ForceTerminal {
+		return targetStdoutPNG
+	}
+
+	if opts.ForceTerminal {
+		return targetStdoutChars
+	}
+
+	cols, rows := r.terminalSize()
+	if terminal.Fits(m, cols, rows) {
+		return targetStdoutChars
+	}
+	return targetWeb
+}
+
 // runEncode 执行编码流程.
 //
-// 输出目标按以下优先级决定:
-//   - 指定了 -o 时写到文件, 格式按扩展名 (png 或 txt)
-//   - 显式要求网页展示时启动网页服务
-//   - 标准输出不是终端时输出 PNG 二进制
-//   - 标准输出是终端时输出字符画; 放不下则改为网页展示
-func (r *Runner) runEncode(ctx context.Context, opts encodeOptions, input source.Input) int {
+// by 说明这次编码是自动判定得出的还是显式指定的, 只用于日志.
+func (r *Runner) runEncode(ctx context.Context, by string, opts encodeOptions, input source.Input) int {
 	stdout, stderr := r.Stdout, r.Stderr
 
 	// 编码只看文本内容; 图片输入在这里没有意义, 直接拒绝比猜测更清楚.
@@ -60,6 +120,9 @@ func (r *Runner) runEncode(ctx context.Context, opts encodeOptions, input source
 		return exitUsage
 	}
 
+	target := r.resolveTarget(opts, m)
+	logInvocation(by, modeEncode, target.describe(opts), []source.Input{input})
+
 	slog.Debug("编码完成",
 		"length", len(content),
 		"bytes", len(input.Data),
@@ -68,19 +131,12 @@ func (r *Runner) runEncode(ctx context.Context, opts encodeOptions, input source
 		"modules", m.Size(),
 		"source", input.Origin.Code())
 
-	stdoutIsTerminal := r.stdoutIsTerminal() || opts.ForceTerminal
-
-	// 显式输出到文件时遵守扩展名约定.
-	if opts.Output != "" {
+	switch target {
+	case targetPNGFile, targetTextFile:
 		return writeToFile(stderr, opts, m)
-	}
-
-	// 显式要求网页展示时优先级最高, 与标准输出是否为终端无关.
-	if opts.ForceWeb {
+	case targetWeb:
 		return r.serveWeb(ctx, opts, m)
-	}
-
-	if !stdoutIsTerminal {
+	case targetStdoutPNG:
 		pngData, err := m.RenderPNG(opts.ModuleSize)
 		if err != nil {
 			fmt.Fprintf(stderr, "生成 PNG 失败: %v\n", err)
@@ -91,22 +147,10 @@ func (r *Runner) runEncode(ctx context.Context, opts encodeOptions, input source
 			return exitUsage
 		}
 		return exitOK
-	}
-
-	// 强制字符画时不受终端尺寸限制, 由调用方自己承担显示不全的风险.
-	if opts.ForceTerminal {
+	default:
 		fmt.Fprint(stdout, terminal.Render(m, !opts.NoColor))
 		return exitOK
 	}
-
-	// 终端输出: 放得下就直接画, 放不下改为网页展示.
-	termCols, termRows := r.terminalSize()
-	if terminal.Fits(m, termCols, termRows) {
-		fmt.Fprint(stdout, terminal.Render(m, !opts.NoColor))
-		return exitOK
-	}
-
-	return r.serveWeb(ctx, opts, m)
 }
 
 // writeToFile 把结果写入指定文件.

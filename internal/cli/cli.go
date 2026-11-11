@@ -35,6 +35,9 @@ type Runner struct {
 	StdoutIsTerminal *bool
 	// TerminalSize 覆盖终端宽高; 为 nil 时读取真实终端, 失败则按 80x24.
 	TerminalSize *[2]int
+	// LogOutput 是日志的输出目标; 为 nil 时写 Stderr.
+	// 测试用它把日志收进缓冲区, 既不污染测试输出, 也能断言日志内容.
+	LogOutput io.Writer
 	// Env 是输入源解析依赖, 留空时使用真实环境.
 	Env *source.Env
 }
@@ -111,7 +114,7 @@ func (r *Runner) runAutoCommand(ctx context.Context, args []string) int {
 		return exitOK
 	}
 
-	logging.Setup(cf.verbose)
+	r.setupLogging(cf.verbose)
 	env := r.env()
 
 	inputs, err := r.collectAuto(env, &cf, fs.Args())
@@ -129,10 +132,10 @@ func (r *Runner) runAutoCommand(ctx context.Context, args []string) int {
 	}
 
 	if allImages {
-		return runDecode(ctx, r.Stdout, r.Stderr, decodeOptions{}, inputs)
+		return r.runDecode(ctx, byAuto, decodeOptions{}, inputs)
 	}
 
-	return r.runEncode(ctx, defaultEncodeOptions(cf.output), mergeText(inputs))
+	return r.runEncode(ctx, byAuto, defaultEncodeOptions(cf.output), mergeText(inputs))
 }
 
 // runDecodeCommand 处理显式解码.
@@ -152,7 +155,7 @@ func (r *Runner) runDecodeCommand(ctx context.Context, args []string) int {
 		return exitOK
 	}
 
-	logging.Setup(cf.verbose)
+	r.setupLogging(cf.verbose)
 	env := r.env()
 
 	inputs, err := r.collectDecode(env, &cf, fs.Args())
@@ -162,7 +165,7 @@ func (r *Runner) runDecodeCommand(ctx context.Context, args []string) int {
 	if len(inputs) == 0 {
 		return r.failInput(source.ErrNoInput)
 	}
-	return runDecode(ctx, r.Stdout, r.Stderr, opts, inputs)
+	return r.runDecode(ctx, byExplicit, opts, inputs)
 }
 
 // collectDecode 收集解码输入.
@@ -275,7 +278,7 @@ func (r *Runner) runEncodeCommand(ctx context.Context, args []string) int {
 		opts.Bind = fmt.Sprintf("127.0.0.1:%d", *port)
 	}
 
-	logging.Setup(cf.verbose)
+	r.setupLogging(cf.verbose)
 	env := r.env()
 
 	inputs, err := r.collect(env, &cf, fs.Args())
@@ -286,7 +289,7 @@ func (r *Runner) runEncodeCommand(ctx context.Context, args []string) int {
 		return r.failInput(source.ErrNoInput)
 	}
 
-	return r.runEncode(ctx, opts, mergeText(inputs))
+	return r.runEncode(ctx, byExplicit, opts, mergeText(inputs))
 }
 
 // mergeText 把多份输入合并成一份文本输入.
@@ -319,6 +322,18 @@ func defaultEncodeOptions(output string) encodeOptions {
 		Bind:       "127.0.0.1:0",
 		Output:     output,
 	}
+}
+
+// setupLogging 初始化日志, 输出目标默认是 Stderr.
+//
+// 日志必须与业务输出分开: 结果可能写到 stdout 的二维码内容或 PNG 二进制,
+// 日志混进去会破坏管道. 测试通过 LogOutput 把日志收进缓冲区.
+func (r *Runner) setupLogging(verbose bool) {
+	out := r.LogOutput
+	if out == nil {
+		out = r.Stderr
+	}
+	logging.Setup(verbose, out)
 }
 
 // env 构造输入源依赖, 注入标准输入与终端状态.

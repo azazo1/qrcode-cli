@@ -28,7 +28,7 @@ qr --version       查看版本
 |---|---|---|
 | `-i, --input` | 通用 | 输入来源: `-` 表示标准输入, `clipboard` 表示剪贴板, 其他值按路径处理 |
 | `-o, --output` | 通用 | 输出路径; 扩展名为 `.txt` 时输出字符画, 其他按 PNG |
-| `-v, --verbose` | 通用 | 输出调试日志到 stderr |
+| `-v, --verbose` | 通用 | 输出更详细的调试日志到 stderr |
 | `--json` | 解码 | 输出结构化结果 |
 | `--text` | 解码 | 只输出二维码内容, 每行一条 |
 | `--no-preprocess` | 解码 | 关闭放大与反色等预处理 |
@@ -40,6 +40,35 @@ qr --version       查看版本
 | `--no-color` | 编码 | 字符画不带 ANSI 配色 |
 
 退出码: `0` 成功, `1` 用法或 IO 错误, `2` 没有找到二维码, `130` 被 Ctrl+C 中断.
+
+## 日志
+
+每次调用都会往 stderr 打一行, 说明读了什么, 按什么模式处理, 结果写到哪里:
+
+```
+time=23:28:51 level=info msg=输入源与模式 mode=decode by=auto origin=file \
+  source=shot.png kind=图片 format=png bytes=1459 output=stdout
+```
+
+各字段含义:
+
+| 字段 | 说明 |
+|---|---|
+| `mode` | `decode` 或 `encode` |
+| `by` | `auto` 表示由程序按输入内容判定, `explicit` 表示写了 `d`/`e` 子命令 |
+| `origin` | `arg` 参数, `file` 文件, `stdin` 管道, `clipboard` 剪贴板 |
+| `source` | 具体名称, 例如文件名或 "剪贴板图片" |
+| `kind` | `图片` 或 `文本` |
+| `format` | 图片格式, 仅图片输入时出现 |
+| `bytes` | 输入字节数 |
+| `output` | 结果去向, 例如 `stdout(png)`, `stdout(chars)`, `file:x.png`, `web:127.0.0.1:8080` |
+
+多文件解码时, 每个来源各记一行. 被跳过的输入会额外记一条 `warn`, 避免用户
+困惑某个输入为什么没有产生结果.
+
+日志只写 stderr, 因此不会污染 stdout 上的二维码内容或 PNG 二进制, 管道用法不受影响.
+
+加 `-v` 后还会输出每个阶段的耗时, 识别到的二维码位置与纠错等级等细节.
 
 ## 用法
 

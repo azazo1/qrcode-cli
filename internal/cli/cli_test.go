@@ -191,15 +191,26 @@ func TestMultiArgsJoin(t *testing.T) {
 func runWith(t *testing.T, args []string, env source.Env) (int, string, string) {
 	t.Helper()
 
-	var out, errb bytes.Buffer
+	code, out, errb, _ := runWithLog(t, args, env)
+	return code, out, errb
+}
+
+// runWithLog 同 runWith, 额外返回日志内容.
+//
+// 日志走独立的缓冲区, 避免全局 logger 把测试输出弄脏.
+func runWithLog(t *testing.T, args []string, env source.Env) (int, string, string, string) {
+	t.Helper()
+
+	var out, errb, logb bytes.Buffer
 	r := &Runner{
 		Stdout:          &out,
 		Stderr:          &errb,
+		LogOutput:       &logb,
 		StdinIsTerminal: env.StdinIsTerminal,
 		Env:             &env,
 	}
 	code := r.Run(context.Background(), args)
-	return code, out.String(), errb.String()
+	return code, out.String(), errb.String(), logb.String()
 }
 
 // TestRunDecodeFromPipe 端到端验证 "管道图片 -> 自动解码".
@@ -384,5 +395,159 @@ func TestEncodeTrimsPipeNewline(t *testing.T) {
 	decoded := decodePNG(t, []byte(out))
 	if decoded != "piped-value" {
 		t.Fatalf("内容 = %q, want %q", decoded, "piped-value")
+	}
+}
+
+// TestLogReportsSourceAndMode 校验每种输入来源与模式都会输出一行日志.
+//
+// 自动模式会替用户决定解码还是编码, 输入也可能来自剪贴板或管道,
+// 缺少这行日志用户就不知道命令刚才读了什么, 做了什么.
+func TestLogReportsSourceAndMode(t *testing.T) {
+	png := qrPNG(t, "log-payload")
+
+	cases := []struct {
+		name       string
+		args       []string
+		env        source.Env
+		wantMode   string
+		wantBy     string
+		wantOrigin string
+		wantOutput string
+	}{
+		{
+			name:       "管道图片自动解码",
+			args:       nil,
+			env:        fakeEnv(nil, nil, "", png, false),
+			wantMode:   "decode",
+			wantBy:     "auto",
+			wantOrigin: "stdin",
+			wantOutput: "output=stdout",
+		},
+		{
+			name:       "管道文本自动编码",
+			args:       nil,
+			env:        fakeEnv(nil, nil, "", []byte("text"), false),
+			wantMode:   "encode",
+			wantBy:     "auto",
+			wantOrigin: "stdin",
+			wantOutput: "output=stdout(png)",
+		},
+		{
+			name:       "剪贴板图片自动解码",
+			args:       nil,
+			env:        fakeEnv(nil, png, "", nil, true),
+			wantMode:   "decode",
+			wantBy:     "auto",
+			wantOrigin: "clipboard",
+			wantOutput: "output=stdout",
+		},
+		{
+			name:       "显式解码 JSON",
+			args:       []string{"d", "shot.png", "--json"},
+			env:        fakeEnv(map[string][]byte{"shot.png": png}, nil, "", nil, true),
+			wantMode:   "decode",
+			wantBy:     "explicit",
+			wantOrigin: "file",
+			wantOutput: "output=stdout(json)",
+		},
+		{
+			name:       "显式编码到文件",
+			args:       []string{"e", "hello", "-o", "out.png"},
+			env:        fakeEnv(nil, nil, "", nil, true),
+			wantMode:   "encode",
+			wantBy:     "explicit",
+			wantOrigin: "arg",
+			wantOutput: "output=file:out.png",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// 编码到文件的用例会真的写盘, 结束后清理.
+			if c.wantOutput == "output=file:out.png" {
+				t.Cleanup(func() { _ = os.Remove("out.png") })
+			}
+
+			_, _, _, logs := runWithLog(t, c.args, c.env)
+			for _, want := range []string{
+				"mode=" + c.wantMode,
+				"by=" + c.wantBy,
+				"origin=" + c.wantOrigin,
+				c.wantOutput,
+			} {
+				if !bytes.Contains([]byte(logs), []byte(want)) {
+					t.Fatalf("日志缺少 %q:\n%s", want, logs)
+				}
+			}
+		})
+	}
+}
+
+// TestLogGoesToStderrNotStdout 校验日志不会污染 stdout 上的结果.
+//
+// stdout 可能是二维码内容或 PNG 二进制, 混入日志会破坏管道.
+func TestLogGoesToStderrNotStdout(t *testing.T) {
+	env := fakeEnv(nil, nil, "", []byte("plain"), false)
+
+	_, out, _, logs := runWithLog(t, nil, env)
+	if logs == "" {
+		t.Fatal("应当产生日志")
+	}
+	if bytes.Contains([]byte(out), []byte("输入源与模式")) {
+		t.Fatalf("日志不应出现在标准输出: %q", out)
+	}
+	// 标准输出应当是纯 PNG.
+	if format, ok := imageio.SniffFormat([]byte(out)); !ok || format != imageio.FormatPNG {
+		t.Fatalf("标准输出不是 PNG, 格式 = %v", format)
+	}
+}
+
+// TestLogCoversEveryInputOfMultiFile 校验多文件解码时每个来源各记一行.
+func TestLogCoversEveryInputOfMultiFile(t *testing.T) {
+	files := map[string][]byte{
+		"one.png": qrPNG(t, "first"),
+		"two.png": qrPNG(t, "second"),
+	}
+	env := fakeEnv(files, nil, "", nil, true)
+
+	_, _, _, logs := runWithLog(t, []string{"d", "one.png", "two.png"}, env)
+	if got := bytes.Count([]byte(logs), []byte("输入源与模式")); got != 2 {
+		t.Fatalf("日志行数 = %d, want 2:\n%s", got, logs)
+	}
+	for _, name := range []string{"one.png", "two.png"} {
+		if !bytes.Contains([]byte(logs), []byte(name)) {
+			t.Fatalf("日志缺少来源 %q:\n%s", name, logs)
+		}
+	}
+}
+
+// TestLogReportsSkippedInput 校验被跳过的输入也会留下日志.
+//
+// 解码模式拿到的文本无法处理, 如果不记录, 用户会疑惑自己给的输入
+// 为什么没有产生结果.
+func TestLogReportsSkippedInput(t *testing.T) {
+	var out, errb, logb bytes.Buffer
+	r := &Runner{
+		Stdout:    &out,
+		Stderr:    &errb,
+		LogOutput: &logb,
+	}
+	inputs := []source.Input{
+		{Origin: source.OriginFile, Label: "text.txt", Kind: source.KindText, Data: []byte("plain")},
+	}
+
+	// 直接驱动解码流程时需要先初始化日志, 否则会落到全局 logger.
+	r.setupLogging(false)
+
+	code := r.runDecode(context.Background(), byExplicit, decodeOptions{},
+		[]source.Input{inputs[0]})
+	if code != exitNoCode {
+		t.Fatalf("退出码 = %d, want %d", code, exitNoCode)
+	}
+	if !bytes.Contains(logb.Bytes(), []byte("跳过非图片输入")) {
+		t.Fatalf("日志缺少跳过提示:\n%s", logb.String())
+	}
+	if !bytes.Contains(logb.Bytes(), []byte("text.txt")) {
+		t.Fatalf("日志缺少来源名称:\n%s", logb.String())
 	}
 }

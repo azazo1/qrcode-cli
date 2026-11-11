@@ -52,11 +52,27 @@ type jsonCode struct {
 // jsonSchemaVersion 是 --json 输出的结构版本.
 const jsonSchemaVersion = 1
 
+// describeOutput 返回解码结果的去向描述, 用于日志.
+func (o decodeOptions) describeOutput() string {
+	switch {
+	case o.JSON:
+		return "stdout(json)"
+	case o.Text:
+		return "stdout(text)"
+	default:
+		return "stdout"
+	}
+}
+
 // runDecode 执行解码流程.
 //
 // inputs 可能包含多张图片 (多个文件参数时), 结果按输入顺序汇总.
-func runDecode(ctx context.Context, stdout, stderr io.Writer, opts decodeOptions, inputs []source.Input) int {
+// by 说明这次解码是自动判定得出的还是显式指定的, 只用于日志.
+func (r *Runner) runDecode(ctx context.Context, by string, opts decodeOptions, inputs []source.Input) int {
+	stdout, stderr := r.Stdout, r.Stderr
 	decoder := decode.New(decode.Options{NoPreprocess: opts.NoPreprocess})
+
+	logInvocation(by, modeDecode, opts.describeOutput(), inputs)
 
 	report := jsonReport{Version: jsonSchemaVersion}
 	total := 0
@@ -64,6 +80,12 @@ func runDecode(ctx context.Context, stdout, stderr io.Writer, opts decodeOptions
 
 	for _, input := range inputs {
 		if input.Kind != source.KindImage {
+			// 解码模式拿到文本无法处理; 跳过时也记一行, 否则用户会疑惑
+			// 自己给的那个输入为什么没有产生结果.
+			slog.Warn("跳过非图片输入",
+				"origin", input.Origin.Code(),
+				"source", input.Label,
+				"kind", input.Kind.String())
 			fmt.Fprintf(stderr, "跳过非图片输入 %s\n", input.Label)
 			continue
 		}
