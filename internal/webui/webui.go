@@ -14,10 +14,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/azazo1/qrcode-cli/internal/encode"
+	"github.com/azazo1/qrcode-cli/internal/localweb"
 )
 
 //go:embed page.html
@@ -62,9 +62,8 @@ func Start(addr string, m *encode.Matrix, pngData []byte) (*Server, string, erro
 	}
 
 	// 监听非回环地址时二维码内容对内网可见, 明确提醒一次.
-	tcpAddr, isTCP := listener.Addr().(*net.TCPAddr)
-	if isTCP && !tcpAddr.IP.IsLoopback() {
-		slog.Warn("网页服务监听在非回环地址, 同一网络的其他设备可以访问二维码内容", "addr", tcpAddr.String())
+	if !localweb.IsLoopback(listener.Addr()) {
+		slog.Warn("网页服务监听在非回环地址, 同一网络的其他设备可以访问二维码内容", "addr", listener.Addr().String())
 	}
 
 	uri := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
@@ -103,23 +102,7 @@ func Start(addr string, m *encode.Matrix, pngData []byte) (*Server, string, erro
 		}
 	}()
 
-	return s, browseURL(tcpAddr, listener.Addr(), isTCP), nil
-}
-
-// browseURL 拼出可以直接在浏览器打开的地址.
-//
-// 监听 0.0.0.0 或 :: 时, 监听地址本身不是能点开的地址 (形如 http://[::]:8080),
-// 这时用回环地址展示; 指定了具体网卡地址时沿用该地址.
-func browseURL(tcpAddr *net.TCPAddr, raw net.Addr, isTCP bool) string {
-	if !isTCP || tcpAddr == nil {
-		return fmt.Sprintf("http://%s/", raw.String())
-	}
-
-	host := tcpAddr.IP.String()
-	if tcpAddr.IP.IsUnspecified() {
-		host = "127.0.0.1"
-	}
-	return fmt.Sprintf("http://%s/", net.JoinHostPort(host, strconv.Itoa(tcpAddr.Port)))
+	return s, localweb.BrowseURL(listener.Addr()), nil
 }
 
 // Wait 阻塞直到 ctx 结束, 然后优雅关闭服务.

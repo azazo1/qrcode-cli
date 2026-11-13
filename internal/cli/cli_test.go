@@ -295,6 +295,9 @@ func TestNormalizeCommand(t *testing.T) {
 		"decode": "decode",
 		"e":      "encode",
 		"encode": "encode",
+		"cam":    "cam",
+		"camera": "cam",
+		"CAMERA": "cam",
 		"hello":  "",
 	}
 	for in, want := range cases {
@@ -702,4 +705,26 @@ func runWebCase(t *testing.T, args []string, opened *[]string) (int, string, str
 	}
 	code := r.Run(ctx, args)
 	return code, out.String(), errb.String(), logb.String()
+}
+
+// TestPrintCamHits 校验摄像头扫码结果的输出与退出码.
+func TestPrintCamHits(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	runner := &Runner{Stdout: &stdout, Stderr: &stderr}
+
+	if code := runner.printCamHits([]string{"first", "second"}); code != exitOK {
+		t.Fatalf("退出码 = %d, want %d", code, exitOK)
+	}
+	if got := stdout.String(); got != "first\nsecond\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := runner.printCamHits(nil); code != exitNoCode {
+		t.Fatalf("空结果的退出码 = %d, want %d", code, exitNoCode)
+	}
+	if !strings.Contains(stderr.String(), "没有找到二维码") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
 }

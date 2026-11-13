@@ -14,6 +14,7 @@ const usageTemplate = `qr - 二维码编解码工具
   qr [选项] [输入...]          自动判断输入是图片还是文本
   qr d|decode [选项] [输入...]  解码图片中的二维码
   qr e|encode [选项] [输入...]  把文本编码成二维码
+  qr cam|camera [选项]         启动本地网页, 用设备摄像头扫描二维码
 
 自动判定规则:
   有位置参数且是图片文件       -> 解码
@@ -26,6 +27,8 @@ const usageTemplate = `qr - 二维码编解码工具
 %s
 编码选项:
 %s
+摄像头选项:
+%s
 通用选项:
 %s
 示例:
@@ -34,6 +37,7 @@ const usageTemplate = `qr - 二维码编解码工具
   qr d hello.png                 解码图片文件
   cat shot.png | qr              从管道解码
   qr d shot.png                  解码含多个二维码的截图
+  qr cam                         打开摄像头页面, 扫码后点结束
 
 退出码:
   0  成功
@@ -43,19 +47,22 @@ const usageTemplate = `qr - 二维码编解码工具
 `
 
 // usage 生成完整的帮助文本.
-func usage(decodeFlags, encodeFlags, commonFlags string) string {
-	return fmt.Sprintf(usageTemplate, decodeFlags, encodeFlags, commonFlags)
+func usage(decodeFlags, encodeFlags, camFlags, commonFlags string) string {
+	return fmt.Sprintf(usageTemplate, decodeFlags, encodeFlags, camFlags, commonFlags)
 }
 
 // normalizeCommand 把子命令别名统一成规范名.
 //
-// 支持 d/decode 与 e/encode 两种写法, 其余情况返回空串表示使用自动模式.
+// 支持 d/decode, e/encode 与 cam/camera 三种写法,
+// 其余情况返回空串表示使用自动模式.
 func normalizeCommand(arg string) string {
 	switch strings.ToLower(arg) {
 	case "d", "decode":
 		return "decode"
 	case "e", "encode":
 		return "encode"
+	case "cam", "camera":
+		return "cam"
 	default:
 		return ""
 	}

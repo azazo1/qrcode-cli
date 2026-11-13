@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>摄像头扫码</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --panel: #171b22;
+    --card: #12161d;
+    --line: #262c36;
+    --text: #e6e8eb;
+    --muted: #8b94a3;
+    --ok: #2fbf71;
+    --danger: #e0806c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 600; }
+  .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+  }
+  .dot.live { background: var(--ok); box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.16); }
+  .counter { font-size: 0.85rem; font-weight: 400; color: var(--muted); }
+  .counter b { color: var(--text); font-weight: 600; }
+  .controls { display: flex; align-items: center; gap: 0.5rem; }
+  select, button {
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.4rem 0.65rem;
+  }
+  select { max-width: 16rem; }
+  button { cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .end { border-color: #7a3a2c; color: var(--danger); }
+  .end:hover:not(:disabled) { background: #2a1a17; }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .stage {
+    position: relative;
+    min-height: 260px;
+    background: #000;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 72vh;
+    object-fit: contain;
+    background: #000;
+  }
+  .hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.58);
+  }
+  .hint.error { background: rgba(122, 32, 24, 0.88); }
+  .panel {
+    min-height: 0;
+    overflow: auto;
+    padding: 0.5rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .empty {
+    padding: 1.2rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.6rem 0.7rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  li .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+  li .text {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  li .meta { font-size: 0.75rem; color: var(--muted); }
+  li .copy { flex: none; }
+</style>
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="dot" id="dot"></span>
+      <span>摄像头扫码</span>
+      <span class="counter">已识别 <b id="count">0</b> 条</span>
+    </div>
+    <div class="controls">
+      <select id="device" aria-label="选择摄像头" hidden></select>
+      <button id="end" class="end">结束</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="hint" class="hint">正在启动摄像头...</div>
+    </section>
+    <section class="panel">
+      <ul id="list"></ul>
+      <div id="empty" class="empty">对准二维码, 识别结果会出现在这里.</div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  "use strict";
+
+  const video = document.getElementById("video");
+  const hint = document.getElementById("hint");
+  const list = document.getElementById("list");
+  const empty = document.getElementById("empty");
+  const countEl = document.getElementById("count");
+  const deviceSelect = document.getElementById("device");
+  const endBtn = document.getElementById("end");
+  const dot = document.getElementById("dot");
+
+  // 两帧之间至少间隔这么久. 解码一帧通常只要几十毫秒, 200ms 的节奏既能
+  // 及时捕捉到画面里的码, 又不会让 CPU 一直满载.
+  const FRAME_INTERVAL = 200;
+  // 上传前把画面缩到长边不超过这个值. 更小的帧解码更快, 也够二维码识别用.
+  const MAX_FRAME_SIDE = 1024;
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let stream = null;
+  let finished = false;
+  let timer = 0;
+  let total = 0;
+  const seen = new Set();
+
+  function setHint(text, isError) {
+    hint.textContent = text;
+    hint.className = isError ? "hint error" : "hint";
+  }
+
+  function describeError(err) {
+    switch (err && err.name) {
+      case "NotAllowedError":
+        return "摄像头权限被拒绝, 请在浏览器地址栏放开权限后刷新页面";
+      case "NotFoundError":
+        return "没有找到可用的摄像头";
+      case "NotReadableError":
+        return "摄像头被其他程序占用, 关掉占用它的程序后刷新页面";
+      case "OverconstrainedError":
+        return "当前摄像头不支持所需的画面参数";
+      default:
+        return (err && err.message) || String(err);
+    }
+  }
+
+  function stopStream() {
+    if (!stream) { return; }
+    for (const track of stream.getTracks()) {
+      track.stop();
+    }
+    stream = null;
+    video.srcObject = null;
+  }
+
+  async function loadDevices() {
+    let devices = [];
+    try {
+      devices = await navigator.mediaDevices.enumerateDevices();
+    } catch (err) {
+      return;
+    }
+
+    const cameras = devices.filter((d) => d.kind === "videoinput");
+    if (cameras.length <= 1) {
+      deviceSelect.hidden = true;
+      return;
+    }
+
+    const track = stream && stream.getVideoTracks()[0];
+    const current = track ? track.getSettings().deviceId : "";
+
+    deviceSelect.replaceChildren();
+    cameras.forEach((camera, index) => {
+      const option = document.createElement("option");
+      option.value = camera.deviceId;
+      option.textContent = camera.label || ("摄像头 " + (index + 1));
+      if (camera.deviceId === current) {
+        option.selected = true;
+      }
+      deviceSelect.appendChild(option);
+    });
+    deviceSelect.hidden = false;
+  }
+
+  async function start(deviceId) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setHint("当前页面不是安全上下文, 浏览器不允许使用摄像头. 请用 http://127.0.0.1 或 https 打开.", true);
+      return;
+    }
+
+    stopStream();
+    setHint("正在启动摄像头...");
+    dot.classList.remove("live");
+
+    const videoConstraints = deviceId
+      ? { deviceId: { exact: deviceId } }
+      // 后置摄像头更常用于扫码; ideal 是软约束, 只有前置摄像头的笔记本也能打开.
+      : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } };
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraints,
+      });
+    } catch (err) {
+      setHint("无法打开摄像头: " + describeError(err), true);
+      return;
+    }
+
+    video.srcObject = stream;
+    try {
+      await video.play();
+    } catch (err) {
+      // 自动播放被拦下时画面仍然会在用户操作后恢复, 这里不当作错误.
+      console.warn("视频播放被阻止", err);
+    }
+
+    dot.classList.add("live");
+    setHint("对准二维码, 自动识别中");
+    await loadDevices();
+    scanLoop();
+  }
+
+  function captureFrame() {
+    if (!video.videoWidth || !video.videoHeight) {
+      return Promise.resolve(null);
+    }
+
+    const scale = Math.min(1, MAX_FRAME_SIDE / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+
+    // 刻意不做镜像变换: 上传的是摄像头原始画面. 镜像的二维码由服务端
+    // 解码器处理, 而页面上的翻转只会误导使用者.
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+  }
+
+  async function scanLoop() {
+    if (finished) { return; }
+
+    const blob = await captureFrame();
+    if (blob && !finished) {
+      try {
+        const response = await fetch("/frame", { method: "POST", body: blob });
+        if (response.ok) {
+          const data = await response.json();
+          addHits(data.codes || []);
+        }
+      } catch (err) {
+        // 网络抖动或服务已经关闭时不必打断扫描, 下一帧会重试.
+        console.warn("发送画面帧失败", err);
+      }
+    }
+
+    if (!finished) {
+      timer = setTimeout(scanLoop, FRAME_INTERVAL);
+    }
+  }
+
+  function addHits(codes) {
+    for (const code of codes) {
+      if (!code || !code.text || seen.has(code.text)) { continue; }
+      seen.add(code.text);
+      list.appendChild(renderItem(code));
+      total += 1;
+    }
+    countEl.textContent = String(total);
+    empty.hidden = total > 0;
+  }
+
+  function renderItem(code) {
+    const item = document.createElement("li");
+
+    const body = document.createElement("div");
+    body.className = "body";
+
+    const text = document.createElement("pre");
+    text.className = "text";
+    text.textContent = code.text;
+
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    const parts = [];
+    if (code.ec_level) { parts.push("纠错 " + code.ec_level); }
+    if (code.width && code.height) { parts.push(code.width + " x " + code.height + " 像素"); }
+    meta.textContent = parts.join(" / ");
+
+    body.append(text, meta);
+
+    const copy = document.createElement("button");
+    copy.className = "copy";
+    copy.textContent = "复制";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(code.text);
+        copy.textContent = "已复制";
+      } catch (err) {
+        // 剪贴板不可用时退回"选中文本", 用户仍能手动复制.
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        copy.textContent = "请手动复制";
+      }
+      setTimeout(() => { copy.textContent = "复制"; }, 1500);
+    });
+
+    item.append(body, copy);
+    return item;
+  }
+
+  async function finish() {
+    if (finished) { return; }
+    finished = true;
+    clearTimeout(timer);
+    stopStream();
+
+    endBtn.disabled = true;
+    dot.classList.remove("live");
+    setHint("已结束, 共识别 " + total + " 条. 识别结果已交给命令行, 标签页可以关闭了.");
+
+    try {
+      await fetch("/finish", { method: "POST" });
+    } catch (err) {
+      console.warn("通知服务结束失败", err);
+    }
+
+    // 由脚本打开的窗口才能被关闭; 直接打开时 window.close 会被忽略,
+    // 页面停留在"已结束"状态, 用户自己关掉标签页即可.
+    setTimeout(() => {
+      try { window.close(); } catch (err) { /* 忽略: 浏览器可能拒绝 */ }
+    }, 300);
+  }
+
+  endBtn.addEventListener("click", finish);
+
+  deviceSelect.addEventListener("change", () => {
+    if (!finished) { start(deviceSelect.value); }
+  });
+
+  // 用户直接关掉标签页时也要让命令行结束. sendBeacon 不依赖页面继续存活.
+  window.addEventListener("pagehide", () => {
+    try { navigator.sendBeacon("/bye"); } catch (err) { /* 忽略 */ }
+  });
+
+  // 页面刷新后恢复已经识别到的结果.
+  fetch("/hits")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => { if (data) { addHits(data.hits || []); } })
+    .catch(() => {});
+
+  start();
+})();
+</script>
+</body>
+</html>

@@ -71,6 +71,8 @@ func (r *Runner) Run(ctx context.Context, args []string) int {
 		return r.runDecodeCommand(ctx, rest)
 	case "encode":
 		return r.runEncodeCommand(ctx, rest)
+	case "cam":
+		return r.runCamCommand(ctx, rest)
 	default:
 		return r.runAutoCommand(ctx, rest)
 	}
@@ -443,9 +445,10 @@ func (r *Runner) failInput(err error) int {
 
 // printUsage 打印帮助, 含各选项的实际定义.
 func (r *Runner) printUsage() {
-	decodeFS, encodeFS, commonFS := newFlagSet("decode"), newFlagSet("encode"), newFlagSet("common")
+	decodeFS, encodeFS, camFS, commonFS := newFlagSet("decode"), newFlagSet("encode"), newFlagSet("cam"), newFlagSet("common")
 	opts := decodeOptions{}
 	enc := defaultEncodeOptions("")
+	camOpts := camOptions{}
 	cf1, cf2, cf3 := commonFlags{}, commonFlags{}, commonFlags{}
 
 	registerCommon(decodeFS, &cf1)
@@ -463,11 +466,15 @@ func (r *Runner) printUsage() {
 	encodeFS.StringVar(&enc.Bind, "bind", "127.0.0.1:0", "监听地址")
 	encodeFS.Int("port", 0, "网页端口")
 
+	registerCam(camFS, &camOpts)
+	camFS.Int("port", 0, "网页服务端口")
+
 	registerCommon(commonFS, &cf3)
 
 	fmt.Fprint(r.Stdout, usage(
 		describeFlags(decodeFS),
 		describeFlags(encodeFS),
+		describeFlags(camFS),
 		describeFlags(commonFS),
 	))
 }
