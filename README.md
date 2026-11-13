@@ -53,9 +53,10 @@ qr --version       查看版本
 | `-s, --size` | 编码 | PNG 每模块像素数, 默认 8 |
 | `--terminal` | 编码 | 标准输出不是终端时也打印字符画 |
 | `--web` | 编码 | 强制用浏览器显示 |
-| `--no-open` | 编码/摄像头 | 启动网页服务后不自动打开浏览器 |
-| `--port` / `--bind` | 编码/摄像头 | 网页服务的端口与监听地址 |
+| `--no-open` | 编码/摄像头/cimbar | 启动网页服务后不自动打开浏览器 |
+| `--port` / `--bind` | 编码/摄像头/cimbar | 网页服务的端口与监听地址 |
 | `--no-color` | 编码 | 字符画不带 ANSI 配色 |
+| `-o, --output` | cimbar | 接收到的文件保存目录, 默认当前目录 |
 
 退出码: `0` 成功, `1` 用法或 IO 错误, `2` 没有找到二维码, `130` 被 Ctrl+C 中断.
 
@@ -244,6 +245,41 @@ qr cam > codes.txt
 镜像画面同样能识别. 部分摄像头和镜面反射会给出左右翻转的画面, 解码器
 会自行尝试镜像采样, 不需要使用者先手动翻转画面.
 
+## cimbar 页面传输
+
+二维码装不下大文件, 需要搬运大文件时用 cimbar:
+
+```shell
+qr cimbar
+qr cimbar -o ~/inbox --no-open
+```
+
+cimbar 把文件切成大量彩色图块帧, 在屏幕上按顺序播放, 接收端用摄像头拍摄并还原.
+两台断网的设备之间只靠屏幕与摄像头完成传输, 不经过网络, 蓝牙或存储介质.
+
+命令启动本地页面并打开浏览器, 入口页给出发送与接收两个入口:
+
+- 发送文件: 选择文件后页面开始播放动态图块, 用于被另一台设备拍摄.
+- 接收文件: 打开摄像头对准发送端屏幕, 收够足够的帧后自动还原文件.
+
+接收到的文件直接写到 `--output` 指定的目录 (默认当前目录), 不经过浏览器的下载
+目录, 终端会打印每个文件的保存路径:
+
+```
+已保存: /Users/me/inbox/report.pdf (3145728 字节)
+```
+
+- 单文件上限约 33MB (指压缩后的体积), 传输速率约 100 KB/s.
+- 丢帧不影响还原: 协议使用喷泉码, 收够任意足够的帧就能拼回完整文件.
+- 接收端必须允许摄像头权限. 页面只在 `http://127.0.0.1` 或 `https://` 下才能使用
+  摄像头, 因此把服务监听在内网地址时, 手机等其他设备打开页面会被浏览器拒绝.
+- 服务默认只监听回环地址, 可用 `--bind` 修改; 监听非回环地址时同一网络的设备
+  也能打开页面并上传文件, 程序会给出提醒.
+- cimbar 是独立格式, 不参与 `qr d` 的解码, 也不走剪贴板.
+
+页面与编解码器来自上游 libcimbar, 以 Mozilla Public License 2.0 授权, 详见
+[第三方组件](#第三方组件).
+
 ## 关于识别能力
 
 解码器使用 ZXing 的算法, 分两轮尝试不同图像变体.
@@ -308,3 +344,15 @@ just test     # 运行测试
 just lint     # 格式检查与 go vet
 just dist     # 生成当前平台的发布产物到 dist/
 ```
+
+## 第三方组件
+
+- 二维码编解码与图像处理依赖 [gozxing](https://github.com/makiuchi-d/gozxing)
+  与 [go-qrcode](https://github.com/skip2/go-qrcode).
+- 剪贴板依赖 [golang.design/x/clipboard](https://pkg.go.dev/golang.design/x/clipboard).
+- `qr cimbar` 的页面与 WebAssembly 编解码器来自
+  [libcimbar v0.6.8](https://github.com/sz3/libcimbar/tree/v0.6.8),
+  以 [Mozilla Public License 2.0](internal/cimbar/web/libcimbar-LICENSE.txt) 授权.
+  该许可证要求分发时保留声明并告知源码获取方式: 许可证原文随二进制一起内嵌,
+  源码可从上面的仓库链接取得, 构建方式见上游的 `WASM.md`.
+  资源的维护方式写在 [internal/cimbar/README.md](internal/cimbar/README.md).

@@ -73,6 +73,8 @@ func (r *Runner) Run(ctx context.Context, args []string) int {
 		return r.runEncodeCommand(ctx, rest)
 	case "cam":
 		return r.runCamCommand(ctx, rest)
+	case "cimbar":
+		return r.runCimbarCommand(ctx, rest)
 	default:
 		return r.runAutoCommand(ctx, rest)
 	}
@@ -446,9 +448,11 @@ func (r *Runner) failInput(err error) int {
 // printUsage 打印帮助, 含各选项的实际定义.
 func (r *Runner) printUsage() {
 	decodeFS, encodeFS, camFS, commonFS := newFlagSet("decode"), newFlagSet("encode"), newFlagSet("cam"), newFlagSet("common")
+	cimbarFS := newFlagSet("cimbar")
 	opts := decodeOptions{}
 	enc := defaultEncodeOptions("")
 	camOpts := camOptions{}
+	cimbarOpts := cimbarOptions{OutputDir: "."}
 	cf1, cf2, cf3 := commonFlags{}, commonFlags{}, commonFlags{}
 
 	registerCommon(decodeFS, &cf1)
@@ -469,12 +473,16 @@ func (r *Runner) printUsage() {
 	registerCam(camFS, &camOpts)
 	camFS.Int("port", 0, "网页服务端口")
 
+	registerCimbar(cimbarFS, &cimbarOpts)
+	cimbarFS.Int("port", 0, "网页服务端口")
+
 	registerCommon(commonFS, &cf3)
 
 	fmt.Fprint(r.Stdout, usage(
 		describeFlags(decodeFS),
 		describeFlags(encodeFS),
 		describeFlags(camFS),
+		describeFlags(cimbarFS),
 		describeFlags(commonFS),
 	))
 }

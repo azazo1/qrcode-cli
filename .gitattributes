@@ -1,3 +1,6 @@
 # 统一按 LF 检出, 避免 Windows 上 Git 把文本转成 CRLF,
 # 导致 gofmt 把所有 .go 文件误判为未格式化.
 * text=auto eol=lf
+
+# WebAssembly 产物按二进制处理, 避免 git 尝试按文本处理它.
+*.wasm binary

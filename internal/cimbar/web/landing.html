@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cimbar 页面传输</title>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #ffffff;
+    color: #111111;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  .lead {
+    max-width: 36rem;
+    margin: 0;
+    text-align: center;
+    line-height: 1.6;
+    color: #374151;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+  }
+  .action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 14rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    background: #111827;
+    color: #ffffff;
+    text-decoration: none;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  }
+  .action.secondary {
+    background: #f3f4f6;
+    color: #111111;
+  }
+  .action strong {
+    font-size: 1.05rem;
+  }
+  .action span {
+    font-size: 0.82rem;
+    opacity: 0.75;
+    line-height: 1.5;
+  }
+  .tips {
+    max-width: 36rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: 8px;
+    background: #f3f4f6;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #374151;
+  }
+  .tips ul {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+  footer {
+    max-width: 36rem;
+    text-align: center;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: #6b7280;
+  }
+  footer a {
+    color: inherit;
+  }
+</style>
+</head>
+<body>
+  <h1>cimbar 页面传输</h1>
+  <p class="lead">
+    把文件编码成动态彩色图块, 通过显示器与摄像头在断网的两台设备之间搬运数据.
+    发送端播放画面, 接收端用摄像头对准屏幕, 收够足够的帧后自动还原文件.
+  </p>
+
+  <div class="actions">
+    <a class="action" href="index.html">
+      <strong>发送文件</strong>
+      <span>选择文件后在本页播放动态图块, 用于被另一台设备拍摄.</span>
+    </a>
+    <a class="action secondary" href="recv.html">
+      <strong>接收文件</strong>
+      <span>打开摄像头对准发送端屏幕, 文件会保存到本机命令行指定的目录.</span>
+    </a>
+  </div>
+
+  <div class="tips">
+    <ul>
+      <li>单文件上限约 33MB, 这里指压缩后的体积; 传输速率约 100 KB/s.</li>
+      <li>接收端需要允许摄像头权限, 画面要清楚, 不要有强反光.</li>
+      <li>接收到的文件由本地服务落盘, 不经过浏览器的下载目录.</li>
+      <li>同一台机器上可以用两个标签页试用, 但要有一台摄像头能看到屏幕.</li>
+    </ul>
+  </div>
+
+  <footer>
+    页面与编解码器来自
+    <a href="https://github.com/sz3/libcimbar" target="_blank" rel="noreferrer">libcimbar v0.6.8</a>,
+    以 Mozilla Public License 2.0 授权, 许可证原文见
+    <a href="libcimbar-LICENSE.txt" target="_blank" rel="noreferrer">libcimbar-LICENSE.txt</a>.
+    <br>
+    对应的源码可从
+    <a href="https://github.com/sz3/libcimbar/tree/v0.6.8" target="_blank" rel="noreferrer">上游仓库</a>
+    取得.
+  </footer>
+</body>
+</html>
