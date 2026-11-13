@@ -64,7 +64,7 @@
   async function save(name, blob) {
     showToast("正在保存 " + name + " (" + formatSize(blob.size) + ") ...", false);
     try {
-      const resp = await fetch("/upload", {
+      const resp = await fetch("upload", {
         method: "POST",
         headers: { "X-Filename": encodeURIComponent(name) },
         body: blob,

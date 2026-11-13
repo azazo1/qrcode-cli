@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/azazo1/qrcode-cli/internal/decode"
 	"github.com/azazo1/qrcode-cli/internal/imageio"
 	"github.com/azazo1/qrcode-cli/internal/localweb"
+	"github.com/azazo1/qrcode-cli/internal/pages"
 )
 
 //go:embed index.html
@@ -52,7 +54,10 @@ type Hit struct {
 	Height int `json:"height"`
 }
 
-// Server 是一个等待浏览器送来画面帧的本地服务.
+// Server 保存摄像头扫码的状态与处理逻辑.
+//
+// 它不自己监听端口: 页面与接口通过 Mount 挂到宿主服务的 mux 上, 这样
+// 子命令可以单独启动它, 统一入口服务也能把它挂在 /cam 前缀下.
 type Server struct {
 	httpServer *http.Server
 	decoder    decode.Decoder
@@ -70,43 +75,61 @@ type Server struct {
 	// done 在用户结束或页面关闭时关闭.
 	done chan struct{}
 	once sync.Once
-
-	serveErr error
 }
 
-// Start 在 addr 上启动服务并返回可访问的页面地址.
+// New 创建一个摄像头扫码服务, 此时还没有监听地址.
+func New(opts Options) (*Server, error) {
+	if opts.Decoder == nil {
+		return nil, errors.New("缺少二维码解码器")
+	}
+	return &Server{
+		decoder: opts.Decoder,
+		seen:    make(map[string]struct{}),
+		done:    make(chan struct{}),
+	}, nil
+}
+
+// Mount 把摄像头页面与接口挂到 mux 上.
+//
+// prefix 形如 "" (服务本身就是页面根) 或 "/cam" (挂在统一入口服务的
+// 子路径下). 页面里的请求都用相对路径, 因此两种挂载方式共用同一份页面.
+func (s *Server) Mount(mux *http.ServeMux, prefix string, mode pages.Mode) {
+	base := strings.TrimSuffix(prefix, "/")
+	pages.Mount(mux, base)
+
+	indexPath := base + "/"
+	mux.HandleFunc(indexPath, s.handleIndex(base, mode))
+	mux.HandleFunc(base+"/frame", s.handleFrame)
+	mux.HandleFunc(base+"/hits", s.handleHits)
+	mux.HandleFunc(base+"/finish", s.handleFinish)
+	mux.HandleFunc(base+"/bye", s.handleFinish)
+
+	// 浏览器访问 /cam 时补上尾斜杠, 页面里的相对路径才能落在 /cam/ 下.
+	if base != "" {
+		mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, indexPath, http.StatusFound)
+		})
+	}
+}
+
+// Start 单独启动摄像头扫码服务, 返回可访问的页面地址.
 //
 // addr 形如 "127.0.0.1:0", 端口为 0 时由系统分配. 服务会一直运行到
 // 页面请求结束或 Wait 的 ctx 被取消.
 func Start(addr string, opts Options) (*Server, string, error) {
-	if opts.Decoder == nil {
-		return nil, "", errors.New("缺少二维码解码器")
+	s, err := New(opts)
+	if err != nil {
+		return nil, "", err
 	}
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, "", fmt.Errorf("监听 %s 失败: %w", addr, err)
 	}
-
-	// 浏览器只在安全上下文里允许使用摄像头: 回环地址被视为安全上下文,
-	// 其他地址需要 HTTPS. 监听非回环地址时提醒一次, 免得用户以为程序坏了.
-	if !localweb.IsLoopback(listener.Addr()) {
-		slog.Warn("网页服务监听在非回环地址, 浏览器通常只在 localhost 或 HTTPS 下允许使用摄像头",
-			"addr", listener.Addr().String())
-	}
-
-	s := &Server{
-		decoder: opts.Decoder,
-		seen:    make(map[string]struct{}),
-		done:    make(chan struct{}),
-	}
+	warnCameraContext(listener.Addr())
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleIndex)
-	mux.HandleFunc("/frame", s.handleFrame)
-	mux.HandleFunc("/hits", s.handleHits)
-	mux.HandleFunc("/finish", s.handleFinish)
-	mux.HandleFunc("/bye", s.handleFinish)
+	s.Mount(mux, "", pages.Solo)
 
 	server := &http.Server{
 		Handler:           mux,
@@ -117,14 +140,20 @@ func Start(addr string, opts Options) (*Server, string, error) {
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("HTTP 服务异常退出", "error", err)
-			s.mu.Lock()
-			s.serveErr = err
-			s.mu.Unlock()
 			s.finish()
 		}
 	}()
 
 	return s, localweb.BrowseURL(listener.Addr()), nil
+}
+
+// warnCameraContext 提醒非回环监听会让浏览器拒绝使用摄像头.
+func warnCameraContext(addr net.Addr) {
+	if localweb.IsLoopback(addr) {
+		return
+	}
+	slog.Warn("网页服务监听在非回环地址, 浏览器通常只在 localhost 或 HTTPS 下允许使用摄像头",
+		"addr", addr.String())
 }
 
 // Hits 返回已识别到的二维码内容, 按首次识别的时间顺序排列, 内容去重.
@@ -151,15 +180,17 @@ func (s *Server) Wait(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
+	// 挂载到宿主服务时这里不持有监听, 没有需要关闭的东西.
+	if s.httpServer == nil {
+		return nil
+	}
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("关闭 HTTP 服务失败: %w", err)
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.serveErr
+	return nil
 }
 
 // finish 通知 Wait 可以收尾了, 重复调用安全.
@@ -170,21 +201,25 @@ func (s *Server) finish() {
 }
 
 // handleIndex 返回摄像头页面.
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+func (s *Server) handleIndex(base string, mode pages.Mode) http.HandlerFunc {
+	indexPath := base + "/"
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != indexPath {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 
-	page, err := indexFS.ReadFile("index.html")
-	if err != nil {
-		http.Error(w, "读取页面失败", http.StatusInternalServerError)
-		return
-	}
-	if _, err := w.Write(page); err != nil {
-		slog.Debug("写入页面响应失败", "error", err)
+		page, err := indexFS.ReadFile("index.html")
+		if err != nil {
+			http.Error(w, "读取页面失败", http.StatusInternalServerError)
+			return
+		}
+		page = pages.Render(page, pages.Header(mode, "cam", "摄像头扫码"))
+		if _, err := w.Write(page); err != nil {
+			slog.Debug("写入页面响应失败", "error", err)
+		}
 	}
 }
 

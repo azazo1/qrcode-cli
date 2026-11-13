@@ -18,6 +18,7 @@ import (
 
 	"github.com/azazo1/qrcode-cli/internal/encode"
 	"github.com/azazo1/qrcode-cli/internal/localweb"
+	"github.com/azazo1/qrcode-cli/internal/pages"
 )
 
 //go:embed page.html
@@ -39,6 +40,8 @@ type pageData struct {
 	Version int
 	// Level 是纠错等级.
 	Level string
+	// Nav 是统一页头, 由 pages 包生成.
+	Nav template.HTML
 }
 
 // Server 是一个展示二维码的本地 HTTP 服务.
@@ -73,9 +76,11 @@ func Start(addr string, m *encode.Matrix, pngData []byte) (*Server, string, erro
 		Modules:   m.Size(),
 		Version:   m.Version,
 		Level:     string(m.Level),
+		Nav:       template.HTML(pages.Header(pages.Solo, "encode", "二维码")),
 	}
 
 	mux := http.NewServeMux()
+	pages.Mount(mux, "")
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := tmpl.Execute(w, data); err != nil {

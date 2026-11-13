@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>二维码工具</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<!--NAV-->
+<div class="wrap">
+  <h1 class="page-title">二维码工具</h1>
+  <p class="lead">
+    编码与解码不需要摄像头; 摄像头扫码与 cimbar 传输需要浏览器允许使用摄像头.
+    每个功能也都能用单独的子命令启动.
+  </p>
+
+  <div class="menu">
+    <a class="entry" href="encode">
+      <strong>编码</strong>
+      <span>把文本生成二维码, 可直接保存为 PNG.</span>
+    </a>
+    <a class="entry" href="decode">
+      <strong>解码</strong>
+      <span>上传截图或图片, 识别其中的二维码.</span>
+    </a>
+    <a class="entry" href="cam/">
+      <strong>摄像头扫码</strong>
+      <span>用设备摄像头连续扫描, 识别结果实时列出.</span>
+    </a>
+    <a class="entry" href="cimbar/">
+      <strong>cimbar 传输</strong>
+      <span>大文件走屏幕与摄像头, 单文件约 33MB.</span>
+    </a>
+  </div>
+</div>
+</body>
+</html>

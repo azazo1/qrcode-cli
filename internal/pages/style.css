@@ -1,0 +1,531 @@
+/* 本地网页的共享样式.
+ *
+ * 所有由 qr 提供的页面都引用这份样式, 保证入口页, 编码页, 解码页,
+ * 摄像头页与 cimbar 页面看起来是同一个产品. 页面专属的少量规则放在
+ * 各自的 <style> 里, 只处理布局上确实特殊的部分.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --line: #e5e7eb;
+  --text: #111827;
+  --muted: #6b7280;
+  --accent-text: #ffffff;
+  --ok: #16a34a;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+
+  --radius: 12px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 旧页面沿用的别名, 让页面自己的布局规则不必逐条改名 */
+  --panel: var(--surface);
+  --card: var(--surface-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --surface: #171b22;
+    --surface-muted: #12161d;
+    --line: #262c36;
+    --text: #e6e8eb;
+    --muted: #8b94a3;
+    --accent-text: #0e1116;
+    --ok: #2fbf71;
+    --danger: #e0806c;
+    --danger-soft: #2a1a17;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+/* 顶栏与导航 */
+
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  font-family: var(--mono);
+}
+
+.app-page {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.app-nav {
+  display: flex;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.app-nav a {
+  padding: 0.32rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.app-nav a:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.app-nav a.active {
+  background: var(--text);
+  color: var(--accent-text);
+}
+
+/* 内容容器 */
+
+.wrap {
+  width: min(100%, 62rem);
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.wrap.narrow {
+  max-width: 40rem;
+}
+
+.page-title {
+  margin: 0.2rem 0 0.5rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+}
+
+.lead {
+  margin: 0 0 1.3rem;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  box-shadow: var(--shadow);
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+.note {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.error-text {
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+/* 主菜单 */
+
+.menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.entry:hover {
+  transform: translateY(-2px);
+  border-color: var(--muted);
+}
+
+.entry strong {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.entry span {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* 控件 */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--accent-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--surface);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+select,
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+textarea {
+  min-height: 7rem;
+  resize: vertical;
+  line-height: 1.6;
+  font-family: var(--mono);
+}
+
+select {
+  width: auto;
+  max-width: 16rem;
+}
+
+label.field {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* 工具条: 页面自己的操作, 位于顶栏之下 */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.dot.live {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.16);
+}
+
+.counter {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.counter b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 摄像头页面 */
+
+.page-cam {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.page-cam main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+}
+
+@media (max-width: 900px) {
+  .page-cam main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stage {
+  position: relative;
+  min-height: 260px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.stage video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.hint.error {
+  background: rgba(122, 32, 24, 0.88);
+}
+
+.panel {
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.item .body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.item .text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
+
+.item .meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.item .copy {
+  flex: none;
+}
+
+.empty {
+  padding: 1.2rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* 二维码展示 */
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.qr-card img {
+  display: block;
+  width: min(70vmin, 420px);
+  height: auto;
+  border-radius: 8px;
+  image-rendering: pixelated;
+}
+
+.qr-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.qr-content {
+  max-width: 100%;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* 编码 / 解码页面 */
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 9rem;
+  padding: 1.2rem;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.drop-zone.over {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+/* cimbar 页面的外壳: 上游页保留自己的画布布局, 这里只统一基调 */
+
+body.page-cimbar-send,
+body.page-cimbar-recv {
+  background: var(--bg);
+  background-image: none;
+  color: var(--text);
+  font-family: var(--font);
+}
+
+body.page-cimbar-send #status {
+  padding: 0.15rem 0.5rem;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+body.page-cimbar-recv .statusbox {
+  color: var(--muted);
+  text-shadow: none;
+}
+
+.cimbar-return {
+  position: fixed;
+  left: 0.8rem;
+  top: 0.8rem;
+  z-index: 9999;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}

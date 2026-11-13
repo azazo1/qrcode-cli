@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>编码</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<!--NAV-->
+<div class="wrap narrow">
+  <h1 class="page-title">编码</h1>
+  <p class="lead">输入文本, 生成二维码图片. 纠错等级固定为 M, 与命令行默认值一致.</p>
+
+  <form id="form" class="card">
+    <label class="field" for="text">文本内容</label>
+    <textarea id="text" placeholder="https://example.com" required></textarea>
+    <div class="form-row">
+      <button class="btn btn-primary" type="submit">生成二维码</button>
+      <span id="status" class="note"></span>
+    </div>
+  </form>
+
+  <div id="result" class="card qr-card" hidden>
+    <img id="qr" alt="二维码">
+    <div id="meta" class="qr-meta"></div>
+    <div id="content" class="qr-content"></div>
+    <div class="form-row">
+      <a id="download" class="btn" href="#" download="qrcode.png">保存 PNG</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const form = document.getElementById("form");
+  const text = document.getElementById("text");
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const qr = document.getElementById("qr");
+  const meta = document.getElementById("meta");
+  const content = document.getElementById("content");
+  const download = document.getElementById("download");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    statusEl.textContent = "正在生成...";
+
+    try {
+      const response = await fetch("api/encode", { method: "POST", body: text.value });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || ("HTTP " + response.status));
+      }
+
+      qr.src = data.data_uri;
+      download.href = data.data_uri;
+      meta.textContent = "版本 " + data.version + " · 纠错 " + data.level +
+        " · " + data.modules + " x " + data.modules + " 模块";
+      content.textContent = data.content;
+      resultEl.hidden = false;
+      statusEl.textContent = "";
+    } catch (err) {
+      resultEl.hidden = true;
+      statusEl.textContent = "生成失败: " + err.message;
+    }
+  });
+})();
+</script>
+</body>
+</html>

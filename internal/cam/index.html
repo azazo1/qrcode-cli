@@ -137,19 +137,17 @@
   li .meta { font-size: 0.75rem; color: var(--muted); }
   li .copy { flex: none; }
 </style>
+<link rel="stylesheet" href="assets/style.css">
 </head>
-<body>
-  <header class="bar">
-    <div class="brand">
-      <span class="dot" id="dot"></span>
-      <span>摄像头扫码</span>
-      <span class="counter">已识别 <b id="count">0</b> 条</span>
-    </div>
-    <div class="controls">
-      <select id="device" aria-label="选择摄像头" hidden></select>
-      <button id="end" class="end">结束</button>
-    </div>
-  </header>
+<body class="page-cam">
+<!--NAV-->
+  <div class="toolbar">
+    <span class="dot" id="dot"></span>
+    <span class="counter">已识别 <b id="count">0</b> 条</span>
+    <span class="spacer"></span>
+    <select id="device" aria-label="选择摄像头" hidden></select>
+    <button id="end" class="btn btn-danger">结束</button>
+  </div>
 
   <main>
     <section class="stage">
@@ -310,7 +308,7 @@
     const blob = await captureFrame();
     if (blob && !finished) {
       try {
-        const response = await fetch("/frame", { method: "POST", body: blob });
+        const response = await fetch("frame", { method: "POST", body: blob });
         if (response.ok) {
           const data = await response.json();
           addHits(data.codes || []);
@@ -357,7 +355,7 @@
     body.append(text, meta);
 
     const copy = document.createElement("button");
-    copy.className = "copy";
+    copy.className = "btn copy";
     copy.textContent = "复制";
     copy.addEventListener("click", async () => {
       try {
@@ -387,10 +385,10 @@
 
     endBtn.disabled = true;
     dot.classList.remove("live");
-    setHint("已结束, 共识别 " + total + " 条. 识别结果已交给命令行, 标签页可以关闭了.");
+    setHint("已结束, 共识别 " + total + " 条. 标签页可以关闭了.");
 
     try {
-      await fetch("/finish", { method: "POST" });
+      await fetch("finish", { method: "POST" });
     } catch (err) {
       console.warn("通知服务结束失败", err);
     }
@@ -410,11 +408,11 @@
 
   // 用户直接关掉标签页时也要让命令行结束. sendBeacon 不依赖页面继续存活.
   window.addEventListener("pagehide", () => {
-    try { navigator.sendBeacon("/bye"); } catch (err) { /* 忽略 */ }
+    try { navigator.sendBeacon("bye"); } catch (err) { /* 忽略 */ }
   });
 
   // 页面刷新后恢复已经识别到的结果.
-  fetch("/hits")
+  fetch("hits")
     .then((response) => (response.ok ? response.json() : null))
     .then((data) => { if (data) { addHits(data.hits || []); } })
     .catch(() => {});

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/azazo1/qrcode-cli/internal/localweb"
+	"github.com/azazo1/qrcode-cli/internal/pages"
 )
 
 //go:embed all:web
@@ -76,10 +77,14 @@ type Saved struct {
 }
 
 // Server 是 cimbar 的本地网页服务.
+//
+// 它不自己监听端口: 页面与上传接口通过 Mount 挂到宿主服务的 mux 上,
+// 这样子命令可以单独启动它, 统一入口服务也能把它挂在 /cimbar 前缀下.
 type Server struct {
 	httpServer *http.Server
 	outputDir  string
 	onSave     func(Saved)
+	mode       pages.Mode
 
 	// saveMu 串行化"挑名字 + 改名"这一步, 避免并发上传互相覆盖.
 	saveMu sync.Mutex
@@ -88,19 +93,48 @@ type Server struct {
 	saved []Saved
 }
 
-// Start 在 addr 上启动服务并返回可用的访问地址.
-//
-// addr 形如 "127.0.0.1:0", 端口为 0 时由系统分配; 返回的 URL 是入口页地址.
-func Start(addr string, opts Options) (*Server, string, error) {
+// New 创建一个 cimbar 服务, 此时还没有监听地址.
+func New(opts Options) (*Server, error) {
 	if opts.OutputDir == "" {
-		return nil, "", errors.New("缺少输出目录")
+		return nil, errors.New("缺少输出目录")
 	}
 	outDir, err := filepath.Abs(opts.OutputDir)
 	if err != nil {
-		return nil, "", fmt.Errorf("解析输出目录失败: %w", err)
+		return nil, fmt.Errorf("解析输出目录失败: %w", err)
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, "", fmt.Errorf("创建输出目录 %s 失败: %w", outDir, err)
+		return nil, fmt.Errorf("创建输出目录 %s 失败: %w", outDir, err)
+	}
+	return &Server{outputDir: outDir, onSave: opts.OnSave}, nil
+}
+
+// Mount 把页面, 静态资源与上传接口挂到 mux 上.
+//
+// prefix 形如 "" (服务本身就是页面根) 或 "/cimbar" (挂在统一入口服务的
+// 子路径下). 页面里的引用都是相对路径, 因此两种挂载方式共用同一份资源.
+func (s *Server) Mount(mux *http.ServeMux, prefix string, mode pages.Mode) {
+	base := strings.TrimSuffix(prefix, "/")
+	s.mode = mode
+	pages.Mount(mux, base)
+	mux.HandleFunc(base+"/upload", s.handleUpload)
+
+	if base == "" {
+		mux.HandleFunc("/", s.handlePage)
+		return
+	}
+	mux.Handle(base+"/", http.StripPrefix(base, http.HandlerFunc(s.handlePage)))
+	mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, base+"/", http.StatusFound)
+	})
+}
+
+// Start 单独启动 cimbar 服务并返回可用的访问地址.
+//
+// addr 形如 "127.0.0.1:0", 端口为 0 时由系统分配; 返回的 URL 是入口页地址.
+func Start(addr string, opts Options) (*Server, string, error) {
+	s, err := New(opts)
+	if err != nil {
+		return nil, "", err
 	}
 
 	listener, err := net.Listen("tcp", addr)
@@ -113,14 +147,8 @@ func Start(addr string, opts Options) (*Server, string, error) {
 		slog.Warn("网页服务监听在非回环地址, 同一网络的其他设备可以访问页面并上传文件", "addr", listener.Addr().String())
 	}
 
-	s := &Server{
-		outputDir: outDir,
-		onSave:    opts.OnSave,
-	}
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("/upload", s.handleUpload)
-	mux.HandleFunc("/", s.handlePage)
+	s.Mount(mux, "", pages.Solo)
 
 	server := &http.Server{
 		Handler:           mux,
@@ -162,6 +190,13 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		}
 		http.NotFound(w, r)
 		return
+	}
+
+	// 入口页接入统一页头; 上游页面保留自己的布局, 只加一个悬浮返回入口.
+	if name == landingPage {
+		data = pages.Render(data, pages.Header(s.mode, "cimbar", "cimbar 传输"))
+	} else if strings.HasSuffix(name, ".html") {
+		data = pages.RenderReturn(data)
 	}
 
 	w.Header().Set("Content-Type", contentType(name))
@@ -283,6 +318,11 @@ func (s *Server) Saved() []Saved {
 // Wait 阻塞直到 ctx 结束, 然后优雅关闭服务.
 func (s *Server) Wait(ctx context.Context) error {
 	<-ctx.Done()
+
+	// 挂载到宿主服务时这里不持有监听, 没有需要关闭的东西.
+	if s.httpServer == nil {
+		return nil
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

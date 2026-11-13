@@ -32,13 +32,18 @@
 
 本项目新增的文件:
 
-- `landing.html`: 入口页, 说明用法并给出发送 / 接收两个入口
+- `landing.html`: 入口页, 用统一样式列出使用说明与发送 / 接收两个入口
 - `bridge.js`: 接管接收页的保存动作, 把解码好的文件 POST 给本地服务
 - `libcimbar-LICENSE.txt`: 上游许可证原文
 
-`recv.html` 与 `index.html` 各有一处行为改动:
+`recv.html` 与 `index.html` 各有几处改动:
 
-- `recv.html` 末尾追加 `<script src="bridge.js"></script>`.
+- `recv.html` 末尾追加 `<script src="bridge.js"></script>`; 保存文件时用相对路径
+  `upload`, 因此页面挂在 `/` 或 `/cimbar/` 下都能工作.
+- 两个页面都在自己的 `<style>` 之后引用 `assets/style.css`, 并给 `<body>` 加
+  `page-cimbar-send` / `page-cimbar-recv` 类, 由共享样式接管背景, 文字与控件基调;
+  页面原有的画布布局保持不变.
+- 两个页面的 `<body>` 后紧跟 `<!--RETURN-->`, 服务端把它换成悬浮的返回链接.
 - 两个页面都去掉了 service worker 注册: 页面由本地服务提供, 不需要离线缓存,
   而固定的预缓存清单会和随二进制一起升级的资源版本冲突, 清单里引用的图标也没有
   随上游发布包提供.
@@ -50,7 +55,8 @@
 1. 下载新版本的 `cimbar.wasm.tar.gz` 并解包, 记下其中的时间戳。
 2. 用新文件替换 `web/` 下除 `landing.html`, `bridge.js`, `libcimbar-LICENSE.txt`
    以外的全部内容。
-3. 检查 `recv.html` 末尾是否仍然引用 `bridge.js`, 没有就补回那一行。
+3. 恢复上面列出的注入: `bridge.js` 引用, `assets/style.css` 引用, `<body>` 上的
+   页面类, `<!--RETURN-->` 占位, 以及去掉 service worker 注册.
 4. 同步本文件里的版本号与源码地址。
 
 带时间戳的文件名是上游防止缓存用的, 替换时不要改名, 页面里的引用会随之一起更新.

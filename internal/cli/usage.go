@@ -16,6 +16,7 @@ const usageTemplate = `qr - 二维码编解码工具
   qr e|encode [选项] [输入...]  把文本编码成二维码
   qr cam|camera [选项]         启动本地网页, 用设备摄像头扫描二维码
   qr cimbar [选项]             启动本地网页, 用屏幕与摄像头在断网设备之间搬运大文件
+  qr home [选项]               打开统一入口, 在一个页面里进入编码, 解码, 摄像头与 cimbar
 
 自动判定规则:
   有位置参数且是图片文件       -> 解码
@@ -32,6 +33,8 @@ const usageTemplate = `qr - 二维码编解码工具
 %s
 cimbar 选项:
 %s
+入口服务选项:
+%s
 通用选项:
 %s
 示例:
@@ -42,6 +45,7 @@ cimbar 选项:
   qr d shot.png                  解码含多个二维码的截图
   qr cam                         打开摄像头页面, 扫码后点结束
   qr cimbar -o ./inbox           启动 cimbar 页面, 接收的文件保存到 ./inbox
+  qr home                        打开统一入口, 在一个页面里选择功能
 
 退出码:
   0  成功
@@ -51,13 +55,13 @@ cimbar 选项:
 `
 
 // usage 生成完整的帮助文本.
-func usage(decodeFlags, encodeFlags, camFlags, cimbarFlags, commonFlags string) string {
-	return fmt.Sprintf(usageTemplate, decodeFlags, encodeFlags, camFlags, cimbarFlags, commonFlags)
+func usage(decodeFlags, encodeFlags, camFlags, cimbarFlags, homeFlags, commonFlags string) string {
+	return fmt.Sprintf(usageTemplate, decodeFlags, encodeFlags, camFlags, cimbarFlags, homeFlags, commonFlags)
 }
 
 // normalizeCommand 把子命令别名统一成规范名.
 //
-// 支持 d/decode, e/encode, cam/camera 与 cimbar/cb 四种写法,
+// 支持 d/decode, e/encode, cam/camera, cimbar/cb 与 home 五种写法,
 // 其余情况返回空串表示使用自动模式.
 func normalizeCommand(arg string) string {
 	switch strings.ToLower(arg) {
@@ -69,6 +73,8 @@ func normalizeCommand(arg string) string {
 		return "cam"
 	case "cimbar", "cb":
 		return "cimbar"
+	case "home":
+		return "home"
 	default:
 		return ""
 	}

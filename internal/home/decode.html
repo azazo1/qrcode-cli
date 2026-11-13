@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>解码</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<!--NAV-->
+<div class="wrap narrow">
+  <h1 class="page-title">解码</h1>
+  <p class="lead">选择或拖入图片识别二维码, 一张图里有多个码时会全部列出.</p>
+
+  <div class="card">
+    <div id="drop" class="drop-zone">
+      <strong>点击选择图片</strong>
+      <span>也可以拖放到这里, 或直接粘贴截图</span>
+      <input id="file" type="file" accept="image/*" hidden>
+    </div>
+    <div class="form-row">
+      <span id="status" class="note"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <ul id="results" class="list"></ul>
+    <div id="empty" class="empty">识别结果会出现在这里.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("file");
+  const statusEl = document.getElementById("status");
+  const results = document.getElementById("results");
+  const empty = document.getElementById("empty");
+
+  drop.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) {
+      decodeFile(fileInput.files[0]);
+    }
+  });
+
+  ["dragenter", "dragover"].forEach((type) => {
+    drop.addEventListener(type, (event) => {
+      event.preventDefault();
+      drop.classList.add("over");
+    });
+  });
+  ["dragleave", "drop"].forEach((type) => {
+    drop.addEventListener(type, () => drop.classList.remove("over"));
+  });
+  drop.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      decodeFile(file);
+    }
+  });
+
+  document.addEventListener("paste", (event) => {
+    for (const item of event.clipboardData.items) {
+      if (item.type.startsWith("image/")) {
+        decodeFile(item.getAsFile());
+        return;
+      }
+    }
+  });
+
+  async function decodeFile(file) {
+    if (!file) {
+      return;
+    }
+    statusEl.textContent = "正在识别 " + file.name + " ...";
+    results.replaceChildren();
+
+    try {
+      const response = await fetch("api/decode", { method: "POST", body: file });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || ("HTTP " + response.status));
+      }
+
+      const found = data.results || [];
+      found.forEach((item, index) => results.appendChild(renderItem(item, index)));
+      empty.hidden = found.length > 0;
+      statusEl.textContent = found.length === 0 ? "没有找到二维码" : "";
+    } catch (err) {
+      empty.hidden = false;
+      statusEl.textContent = "识别失败: " + err.message;
+    }
+  }
+
+  function renderItem(item, index) {
+    const li = document.createElement("li");
+    li.className = "item";
+
+    const body = document.createElement("div");
+    body.className = "body";
+
+    const text = document.createElement("pre");
+    text.className = "text";
+    text.textContent = item.text;
+
+    const parts = ["#" + (index + 1)];
+    if (item.ec_level) {
+      parts.push("纠错 " + item.ec_level);
+    }
+    if (item.bounds && item.bounds.width) {
+      parts.push(item.bounds.width + " x " + item.bounds.height + " 像素");
+    }
+
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = parts.join(" / ");
+    body.append(text, meta);
+
+    const copy = document.createElement("button");
+    copy.className = "btn copy";
+    copy.textContent = "复制";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(item.text);
+        copy.textContent = "已复制";
+      } catch (err) {
+        // 剪贴板不可用时退回选中文本, 用户仍能手动复制.
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        copy.textContent = "请手动复制";
+      }
+      setTimeout(() => { copy.textContent = "复制"; }, 1500);
+    });
+
+    li.append(body, copy);
+    return li;
+  }
+})();
+</script>
+</body>
+</html>
