@@ -198,6 +198,12 @@ a {
   line-height: 1.6;
 }
 
+/* 菜单后面紧跟的卡片也要有间距, 否则会和上面的入口贴在一起 */
+.menu + .card,
+.menu + .note {
+  margin-top: 1rem;
+}
+
 /* 控件 */
 
 .btn {

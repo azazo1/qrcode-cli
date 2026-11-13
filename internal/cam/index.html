@@ -171,6 +171,14 @@
   const countEl = document.getElementById("count");
   const deviceSelect = document.getElementById("device");
   const endBtn = document.getElementById("end");
+
+  // 统一入口里的摄像头页只是四个页面之一, 没有"结束服务"的语义,
+  // 而且结束动作会尝试关闭标签页, 那会把入口页一起关掉.
+  // 页头带导航时说明页面挂在统一入口下, 这时不显示结束按钮.
+  const standalone = !document.querySelector(".app-nav");
+  if (!standalone) {
+    endBtn.hidden = true;
+  }
   const dot = document.getElementById("dot");
 
   // 两帧之间至少间隔这么久. 解码一帧通常只要几十毫秒, 200ms 的节奏既能
@@ -395,9 +403,12 @@
 
     // 由脚本打开的窗口才能被关闭; 直接打开时 window.close 会被忽略,
     // 页面停留在"已结束"状态, 用户自己关掉标签页即可.
-    setTimeout(() => {
-      try { window.close(); } catch (err) { /* 忽略: 浏览器可能拒绝 */ }
-    }, 300);
+    // 统一入口下不能关闭标签页, 否则会把整个入口页一起关掉.
+    if (standalone) {
+      setTimeout(() => {
+        try { window.close(); } catch (err) { /* 忽略: 浏览器可能拒绝 */ }
+      }, 300);
+    }
   }
 
   endBtn.addEventListener("click", finish);
